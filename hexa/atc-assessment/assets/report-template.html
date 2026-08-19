@@ -1,0 +1,144 @@
+<!--
+  Clean Core Assessment — report template (management summary over developer detail).
+  Fill {{PLACEHOLDERS}}; duplicate rows marked "ROW" per pattern / prerequisite / object.
+  Keep layout + classes; change content only. See references/report-format.md.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clean Core Assessment — {{DATE}}</title>
+<style>
+  :root{--bg:#1b1f24;--panel:#23282e;--line:#363c43;--text:#d5dae0;--muted:#98a2ad;
+    --head:#eef1f4;--accent:#4aa06b;--accent2:#4a9eaa;--warn:#c9a24a;--barfill:#cbd3da}
+  *{box-sizing:border-box}
+  body{margin:0;padding:26px 30px;background:var(--bg);color:var(--text);
+    font:13.5px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  h1{font-size:19px;color:var(--head);margin:0 0 14px;font-weight:700}
+  h2{font-size:14px;color:var(--head);margin:22px 0 8px;font-weight:700}
+  .zone{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    margin:26px 0 2px;border-top:1px solid var(--line);padding-top:10px}
+  .zone:first-of-type{border-top:none;padding-top:0;margin-top:14px}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 6px}
+  .kpi{flex:1 1 120px;background:var(--panel);border:1px solid var(--line);
+    border-radius:6px;padding:11px 14px}
+  .kpi .n{font-size:24px;font-weight:700;color:var(--head);line-height:1.1}
+  .kpi .l{font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);
+    margin-top:3px}
+  .kpi.good .n{color:#7fc7a0}.kpi.watch .n{color:#e0c887}
+  .kpi .n small{font-size:13px;font-weight:600;color:var(--muted)}
+  .meta{color:var(--muted);margin:2px 0 0;font-size:12.5px}
+  .meta .tag{margin-right:2px}
+  .tag{background:#2c333b;border:1px solid var(--line);border-radius:3px;padding:1px 6px;
+    font-size:12px;color:#cfd6dc}
+  table{width:100%;border-collapse:collapse;margin:4px 0;font-size:12.5px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel);color:var(--head);font-weight:600}
+  td.num,th.num{text-align:right;white-space:nowrap}
+  .total td{font-weight:700;color:var(--head);background:#20262d}
+  .bar{height:13px;background:#20262d;border:1px solid var(--line);border-radius:3px;
+    overflow:hidden;position:relative}
+  .bar-empty{position:absolute;inset:0;
+    background:repeating-linear-gradient(45deg,#2a3038 0 4px,#20262d 4px 8px)}
+  .bar-fill{position:relative;height:100%;background:var(--barfill)}
+  .pill{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);
+    background:#2a3038;color:#d5dae0}
+  .cds{color:#8fb7c9}
+  .risk{color:var(--warn);font-weight:600}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:20px;border-top:1px solid var(--line);
+    padding-top:8px}
+  code{color:#cdd6df;font-size:12px}
+</style>
+</head>
+<body>
+
+  <h1>Clean Core Assessment — {{DATE}}</h1>
+
+  <!-- ============================ MANAGEMENT ============================ -->
+  <div class="zone">Summary</div>
+
+  <!-- A. Executive summary — KPI cards + one meta line -->
+  <div class="kpis">
+    <div class="kpi"><div class="n">{{FINDINGS}}</div><div class="l">Findings</div></div>
+    <div class="kpi"><div class="n">{{PATTERNS}}</div><div class="l">Remediation patterns</div></div>
+    <div class="kpi good"><div class="n">{{AI_PCT}}<small>%</small></div><div class="l">AI-remediable</div></div>
+    <div class="kpi watch"><div class="n">{{BLOCKERS}}</div><div class="l">Blockers to clear</div></div>
+  </div>
+  <div class="meta"><span class="tag">Usage of APIs</span>{{MESSAGE}} ·
+    {{OBJECTS}} object(s) · {{OOS}} out of scope · Target: {{TARGET}} ·
+    <span style="color:#c9a24a">{{EFFORT}} after verification</span></div>
+
+  <!-- Object Profile -->
+  <h2>Object Profile</h2>
+  <table>
+    <thead><tr><th>Object</th><th>Type</th><th>Package</th><th class="num">Lines</th>
+      <th>Source</th><th class="num">Findings</th><th class="num">Patterns</th>
+      <th>Fix approach</th></tr></thead>
+    <tbody>
+      <!-- ROW: one per consuming object -->
+      <tr><td>{{O_OBJ}}</td><td>{{O_TYPE}}</td><td>{{O_PKG}}</td><td class="num">{{O_LINES}}</td>
+        <td>{{O_SRC}}</td><td class="num">{{O_FINDINGS}}</td><td class="num">{{O_PATTERNS}}</td>
+        <td>{{O_BUCKET}}</td></tr>
+    </tbody>
+  </table>
+
+  <!-- B. Remediation Outlook -->
+  <h2>Remediation Outlook</h2>
+  <table>
+    <thead><tr><th>Fix approach</th><th class="num">Findings</th><th class="num">Patterns</th>
+      <th class="num">Share</th><th>Distribution</th></tr></thead>
+    <tbody>
+      <tr><td>AI Fix</td><td class="num">{{AIFIX_N}}</td><td class="num">{{AIFIX_P}}</td>
+        <td class="num">{{AIFIX_PCT}}%</td>
+        <td><div class="bar"><div class="bar-empty"></div><div class="bar-fill" style="width:{{AIFIX_PCT}}%"></div></div></td></tr>
+      <tr><td>AI + Developer Fix</td><td class="num">{{AIDEV_N}}</td><td class="num">{{AIDEV_P}}</td>
+        <td class="num">{{AIDEV_PCT}}%</td>
+        <td><div class="bar"><div class="bar-empty"></div><div class="bar-fill" style="width:{{AIDEV_PCT}}%"></div></div></td></tr>
+      <tr><td>Architectural Redesign</td><td class="num">{{RED_N}}</td><td class="num">{{RED_P}}</td>
+        <td class="num">{{RED_PCT}}%</td>
+        <td><div class="bar"><div class="bar-empty"></div><div class="bar-fill" style="width:{{RED_PCT}}%"></div></div></td></tr>
+      <tr><td>Assessment Inconclusive</td><td class="num">{{INC_N}}</td><td class="num">{{INC_P}}</td>
+        <td class="num">{{INC_PCT}}%</td>
+        <td><div class="bar"><div class="bar-empty"></div><div class="bar-fill" style="width:{{INC_PCT}}%"></div></div></td></tr>
+      <tr class="total"><td>AI-remediable total</td><td class="num">{{AIREM_N}}</td><td class="num">{{AIREM_P}}</td>
+        <td class="num">{{AIREM_PCT}}%</td>
+        <td><div class="bar"><div class="bar-empty"></div><div class="bar-fill" style="width:{{AIREM_PCT}}%"></div></div></td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============================ DEVELOPER ============================ -->
+  <div class="zone">Developer detail</div>
+
+  <!-- C. Before you code -->
+  <h2>Before you code — prerequisites</h2>
+  <table>
+    <thead><tr><th>Object</th><th>Prerequisite</th><th>Status</th><th>Owner</th></tr></thead>
+    <tbody>
+      <!-- ROW: one per prerequisite -->
+      <tr><td>{{PRQ_OBJ}}</td><td>{{PRQ_TEXT}}</td><td><span class="pill">{{PRQ_STATUS}}</span></td><td>{{PRQ_OWNER}}</td></tr>
+    </tbody>
+  </table>
+
+  <!-- D. Findings detail (one row per distinct pattern) -->
+  <h2>Findings detail</h2>
+  <table>
+    <thead><tr><th>Object · Type</th><th>Table</th><th>Operation</th><th>Field(s)</th>
+      <th>Location(s)</th><th>Derived write API</th><th>Confidence</th><th>Fix approach</th>
+      <th>Next step</th></tr></thead>
+    <tbody>
+      <!-- ROW: one per pattern; prefix {{F_TABLE}} with '⚠ domain' via class risk when sensitive -->
+      <tr>
+        <td>{{F_OBJ}}</td><td>{{F_TABLE}}</td><td>{{F_OP}}</td><td><code>{{F_FIELDS}}</code></td>
+        <td><code>{{F_LOC}}</code></td><td>{{F_API}}</td><td>{{F_CONF}}</td>
+        <td>{{F_BUCKET}}</td><td>{{F_NEXT}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    {{PROVENANCE}}
+    <br><em>Assumptions / unknowns:</em> {{ASSUMPTIONS}}
+  </div>
+
+</body>
+</html>

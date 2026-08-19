@@ -1,0 +1,7 @@
+# Generated Clean Core Assessment reports (produced per run by /hexa-assess)
+hexa-assessment-*.html
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
