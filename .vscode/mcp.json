@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "hexa-atc": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["hexa/atc-mcp/server.mjs"],
+      "env": {
+        "H1E_BASE_URL": "https://azlsaph1eas01.int.pg.com:8443",
+        "H1E_CLIENT": "104",
+        "H1E_TLS_INSECURE": "true",
+        "H1E_COOKIE_FILE": "hexa/atc-mcp/cookie.txt"
+      }
+    }
+  }
+}

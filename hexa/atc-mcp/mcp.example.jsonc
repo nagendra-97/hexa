@@ -1,0 +1,23 @@
+// Example VS Code MCP registration for the Hexa ATC detail-fetch server.
+//
+// Copy this block into <repo-root>/.vscode/mcp.json (create it if missing), then
+// reload. Provide auth via the git-ignored cookie file referenced by
+// "H1E_COOKIE_FILE". Use the H1E SESSION cookie (SAP_SESSIONID_H1E_104) — NOT
+// MYSAPSSO2 (a MYSAPSSO2 ticket issued by another system, e.g. H1D, is rejected by
+// H1E). Never paste the cookie into chat.
+{
+  "servers": {
+    "hexa-atc": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["hexa/atc-mcp/server.mjs"],
+      "env": {
+        "H1E_BASE_URL": "https://azlsaph1eas01.int.pg.com:8443",
+        "H1E_CLIENT": "104",
+        "H1E_TLS_INSECURE": "true",
+        // Git-ignored file holding a single line: SAP_SESSIONID_H1E_104=<value>
+        "H1E_COOKIE_FILE": "hexa/atc-mcp/cookie.txt"
+      }
+    }
+  }
+}

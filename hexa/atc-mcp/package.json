@@ -1,0 +1,20 @@
+{
+  "name": "hexa-atc-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local MCP server that fetches detailed ATC worklist findings (e.g. Priority 1) from an ABAP system over ADT REST, using an SSO cookie. Fills the gap the standard ATC MCP tools leave: they run the check and return priority counts, but not the per-finding detail the Hexa clean-core assessment needs.",
+  "type": "module",
+  "bin": {
+    "hexa-atc-mcp": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "fast-xml-parser": "^4.5.0"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+# Never commit credentials
+cookie.txt
+auth.txt
+.env
+*.cookie
+*.pass
+_try.mjs

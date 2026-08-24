@@ -4,4 +4,6 @@ hexa-assessment-*.html
 # OS / editor cruft
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+# …but ship the ready-made MCP registration (no secrets; cookie lives in cookie.txt)
+!.vscode/mcp.json

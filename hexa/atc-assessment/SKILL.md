@@ -18,21 +18,51 @@ description: >-
 
 ## What this skill is for
 
-This skill assesses ATC clean-core findings where custom ABAP writes directly to
-an SAP-owned DDIC table or table view, and assigns each one an effort category.
-It is an **assessment** activity: the goal is to understand the finding and route
-it, **not** to write the corrected code. Fixing is a later phase.
+This skill assesses SAP clean-core ATC findings and assigns each one a
+remediation-effort category. It is an **assessment** activity: the goal is to
+understand each finding and route it, **not** to write the corrected code. Fixing
+is a later phase.
 
-It handles exactly these two message titles from the `Usage of APIs` check:
+The findings it covers — and where each finding's specific logic lives — are listed
+in the dispatch table below. Today the DDIC-write and object-modified findings are
+active.
 
-| Check Title  | Message Title |
-|--------------|---------------|
-| Usage of APIs | Updating DDIC database tables or DDIC table views is not allowed |
-| Usage of APIs | Updating DDIC database tables or DDIC table views is not allowed (successor available) |
+## Finding modules (dispatch)
 
-Both are the **same rule** with two branches: a direct write to an SAP DDIC
-table/view is never permitted under clean core, so the finding is always a hard
-error. The only difference is whether SAP's classification attached a successor.
+The four buckets, the assessment workflow, and the report below are shared across
+**all** clean-core ATC findings. The finding-specific logic (how to parse, read,
+classify, and route each message) lives in a per-finding module. Match the
+finding's **message title** to its module and follow that module together with the
+shared workflow.
+
+| Check title | Message title | Module | Status |
+|-------------|---------------|--------|--------|
+| Usage of APIs | Updating DDIC database tables or DDIC table views is not allowed *(± successor available)* | [references/ddic-write.md](references/ddic-write.md) | **Active** |
+| Usage of APIs | PERFORM program is not allowed | [references/perform-not-allowed.md](references/perform-not-allowed.md) | **Active** |
+| Allowed Enhancement Technologies | Enhancement technology not allowed | [references/enhancement-technology.md](references/enhancement-technology.md) | Skeleton — not yet active |
+| Detect customer modifications | Object is modified | [references/object-modified.md](references/object-modified.md) | **Active** |
+
+The DDIC-write, object-modified, and PERFORM-not-allowed modules are authored and
+active. The remaining module (enhancement-technology) is a **skeleton** — do not use
+it for assessment until it is filled in and marked active here.
+
+## Intake (how findings arrive)
+
+Findings reach the workflow one of two ways; both produce the same finding rows that
+feed Step 1 onward:
+
+- **Automated ATC run** *(default)* — the developer names the object(s) to check and
+  Hexa runs the `ZSMASH_CLEANCORE` check variant on H1E and retrieves only Priority 1
+  findings, so nothing is pasted. Follow
+  [references/atc-run-intake.md](references/atc-run-intake.md): a single `atc_scan`
+  call on the `hexa-atc` server resolves the object URI, runs the variant, and returns
+  the detailed Priority 1 rows — no `mcp_adt` needed. It then maps the result into the
+  same intake. The session cookie is read from the `hexa-atc` server's environment —
+  never pasted into chat.
+- **Manual paste** *(fallback)* — the developer pastes a `Check Title / Message Title`
+  table or full finding rows instead of a live run.
+
+Either way, once the finding rows exist, continue with the shared workflow below.
 
 ## The four effort buckets
 
@@ -41,8 +71,8 @@ Route every finding to exactly one:
 - **AI fix** — deterministic and low-context. The correct replacement is knowable
   from the code and the finding alone, with no business-logic judgment and no
   transactional side effects to validate. An assistant could produce the final
-  change unattended. In practice this is reachable **only for the read-swap case**
-  (see Branch A) — never for a write.
+  change unattended. In practice this is rarely reachable; each finding module
+  states when (if ever) it applies.
 - **AI + Dev** — an assistant can draft the remediation, but a developer must
   validate business/transactional semantics (commit, locking, authorizations,
   field behavior) and test before it ships.
@@ -63,22 +93,16 @@ Extract, from the finding row/text:
 
 - **Consuming object** — the custom object that contains the violation
   (e.g. `ZSUSLOCK`, type `PROG`). This is where the source lives.
-- **Referenced object** — the SAP table/view being written (e.g. `USH02`, type
-  `TABL`), plus its package, software component, and application component if
-  given. These identify the table's owning area and help judge its role.
-- **Successor present or not** — read this from the finding itself. The
-  "(successor available)" variant means SAP attached a successor; the plain
-  variant means it did not ("Not specified"). **Do not query the Cloudification
-  Repository for this** — the ATC check already resolved it against that repo when
-  it produced the finding, so a lookup only returns the same answer.
-- **Confirm it is a write.** Reading an SAP DDIC table is only a warning;
-  *modifying* it is the error. This message is the write case by definition, but
-  keep it in mind when you read the source — the flagged statement is an
-  `INSERT` / `UPDATE` / `MODIFY` / `DELETE`.
+- **Referenced object** — the SAP object the finding points at (table/view,
+  program, enhancement spot, or modified object), plus its package, software
+  component, and application component if given. These identify the owning area.
+- **Finding-specific attributes** — read any per-message attributes the matched
+  module calls for (e.g. successor present/not, and confirming the write verb, for
+  DDIC-write). See the module named in the dispatch table.
 
-Note the finding is non-suppressible (no pragma / pseudo-comment), so the only
-valid outcomes are genuine remediation or a formal ATC exemption — never
-silencing it.
+These clean-core findings are typically non-suppressible (no pragma /
+pseudo-comment), so the only valid outcomes are genuine remediation or a formal
+ATC exemption — never silencing it.
 
 ### Step 2 — Read the source in the workspace
 
@@ -87,9 +111,28 @@ read the referenced object's code from the open VS Code workspace.** This is wha
 turns a guess into an assessment, and it is the difference between a real bucket
 and "Assessment inconclusive."
 
-**Start from the objects the user has opened or attached as context** — those are
-the source of truth the user pointed you at. Read them first, then search the
-workspace for any referenced includes/routines they don't already cover.
+**Enumerate the finding's objects and let the developer pick the scope before you
+assess.** In VS Code connected to an S/4 system over ADT, a finding often names a
+**container** (e.g. a function group) whose flagged statements are spread across
+several includes or function modules. Do **not** limit yourself to the active tab or
+even the currently open tabs — **enumerate the container's member objects from the
+ADT virtual filesystem** (list the object's folder, e.g. the function group's
+`…/Function Groups/<FUGR>/` directory, to discover every function module / include /
+TOP include, whether or not a tab is open). Then **present those objects to the
+developer as a selectable list of options and let them choose which are relevant** —
+do not decide the scope yourself. Recommend the likely ones (the members that
+contain the flagged write and its shared declarations), but the developer's
+selection is authoritative. **Read every selected object** (following the call chain
+into includes), then search the workspace for any referenced routines the selection
+doesn't cover. **Start assessing only after the developer has made the selection** —
+an incomplete set silently drops write sites and undercounts the findings.
+
+**Read the source fresh after the selection, before you classify.** Once the
+developer has chosen the objects, open and read each selected object's code *now* —
+do not rely on an earlier read or assume its contents. The sequence is strict: paste
+findings → present objects → developer selects → **read the selected source** →
+assess the findings against that code → render the report. Only what you read here
+drives the classification.
 
 Open the consuming object and read the routine containing the flagged write, then
 follow what matters:
@@ -122,95 +165,37 @@ or a needed include is neither open nor in the workspace — does that gap feed
 "Assessment inconclusive (source unavailable)"; note the unread dependency in the
 record rather than treating its absence as intent.
 
+**No hard-coded objects.** Every assessment is driven per-run by three inputs only:
+(a) the ATC finding data, (b) the source read fresh for this run, and (c) your own
+reasoning to propose the candidate write API/behavior. Never cache or hard-code
+per-table verdicts (e.g. "table X → API Y") or per-object shapes (e.g. "object Z has
+N writes") as reusable routing facts, and never let a prior run's conclusion stand in
+for reading this run's code. Any specific table, successor, or API named in this skill
+or its references is an **illustrative example only, never a rule** — derive the real
+target from the finding and the code in front of you.
+
 Reading the code resolves the four things the finding omits: the **verb and
 fields written**, the **intent**, the **feasibility** of an API mapping, and the
 **sensitivity in context**.
 
-### Step 3 — Classify the table's role (intent)
+### Step 3 — Classify and route (per-finding module)
 
-Using the source plus the table's area, classify what the write is really doing.
-The role drives the Branch B routing:
+Classification and bucket routing are finding-specific. Follow the module matched
+in the dispatch table: it defines the finding's classification dimension and its
+rules for routing into the four buckets. Return here for the shared overrides and
+reporting.
 
-- **Business / master / transactional data** (e.g. a material, order, or
-  document table) → owned by a released transactional API or business object.
-- **Configuration / customizing** (settings written from code) → should not be
-  written from code at all.
-- **Log / history / temporary** (audit/history tables; often delivery class `L`
-  or `G`, delivered empty) → there is **no write API by design**; SAP populates
-  these internally when the owning process runs. A custom program writing here is
-  doing something SAP's own logic should do.
+### Step 4 — Apply shared overrides
 
-### Step 4 — Route by branch
+These apply on top of any module's routing:
 
-**Branch A — successor present ("… (successor available)").**
-Do not trust the successor blindly for a write. Table successors are frequently
-**read** CDS interface views, which do not solve a write.
-
-- If the flagged operation is a **read**, or the successor is a **write-capable
-  API/behavior that matches the operation** → the target is handed to you.
-  - read / `SELECT` swapped for the successor CDS view → **AI fix**
-  - write performed through the named released API with LUW handling → **AI + Dev**
-- If the successor is a **read view but the operation is a write** → the successor
-  does not resolve the finding. Treat it as effectively no-successor and fall
-  through to Branch B.
-
-**Branch B — no successor (plain message, or fell through from A).**
-SAP's classification gives nothing, so reason about which behavior owns the
-table's data, driven by the Step 3 role:
-
-- **Business / master / transactional** → identify the owning released API/BO and
-  map the written fields to it. Every field maps → **AI + Dev**. A field has no
-  API path → **Redesign** (for the part that cannot be mapped).
-- **Configuration / customizing** → **Redesign** (move to customizing or a
-  maintenance API; remove the write from code).
-- **Log / history / temporary** → **Redesign** — remove the direct write and let
-  the owning operation write the record — or **Assessment inconclusive** if the
-  program's intent is genuinely unclear.
-
-#### Always propose a candidate write API (the D → B/A lift)
-
-The point of the assessment is to move findings **out of Assessment Inconclusive
-(D)** toward **AI + Developer Fix (B)** or **AI Fix (A)** — never to leave a route
-empty when a plausible target exists. So for every write, name at least one
-**concrete candidate write API/behavior** in the record's "Derived write API"
-field, derived from the table plus the source context, in this priority order:
-
-1. **Released RAP business object / released API** for the table's business object
-   — the clean-core-preferred target (e.g. the **Product** BO/API for `MARA`).
-2. **Owning BAPI / released function module** that writes the table
-   (e.g. `BAPI_MATERIAL_SAVEDATA` for `MARA`, `BAPI_*_CHANGE/_CREATE` for other
-   business objects) — propose it even though its released / clean-core status
-   still has to be confirmed.
-3. **Maintenance / customizing API** for configuration tables; the **owning
-   process/behavior** for log/history tables.
-
-Rules for the candidate:
-
-- **A named candidate lifts the route from D to B.** A business/master write with
-  at least one plausible candidate API is **AI + Developer Fix**, not Assessment
-  Inconclusive. Only a genuinely unknown owner (no plausible candidate) stays D;
-  no mappable path at all → **Redesign**.
-- **Candidate ≠ verified.** Every proposed API carries release-status *to verify*
-  and becomes a **prerequisite row** in the report (is it released / clean-core
-  on the target release, and is each written field write-exposed there). This
-  keeps the optimistic bucket honest — see Step 6 and the report format.
-- **Prefer released over classic.** When both exist, lead with the released
-  RAP/API and list the classic BAPI as the fallback the developer can fall back to
-  if the released path lacks a needed field — never present a non-released BAPI as
-  the clean-core end state without that caveat.
-
-These override the branch result:
-
-- **Writes never reach AI fix.** Commit / lock / validation side effects mean any
-  write needs at least developer validation. AI fix is reachable only for the read
-  swap in Branch A.
-- **Sensitivity.** Security, user/authentication, or financial tables force a
+- **Sensitivity.** Security, user/authentication, or financial objects force a
   **mandatory human/security review** regardless of the computed bucket; they
   never route to an unattended fix. Flag this explicitly in the record.
 - **Missing source or ambiguous intent** → **Assessment inconclusive (source
   required/unavailable)**, with the provisional route noted.
 
-### Step 6 — Compile the record, then render the report
+### Step 5 — Compile the record, then render the report
 
 Per finding, capture: object · type · package · lines · source-read? · referenced
 table + role · **operation (verb) + fields written** · **code location
@@ -236,11 +221,13 @@ count:
 - **Flag risk** on findings touching security / user / financial tables.
 
 Then render the **Clean Core Assessment report** as HTML using
-`assets/report-template.html`, following `references/report-format.md` exactly. The
-report is one page for two readers: a concise **management summary** (readiness
-headline, remediation outlook, gate count) over **developer detail** (prerequisites
-checklist, per-pattern findings). Keep both scannable — not exhaustive. Do not invent
-a different layout. Read the reference before rendering.
+`assets/report-template.html`, following `references/report-format.md` exactly. Read
+`references/report-format.md`, `assets/report-template.html`, and any existing dated
+report file in one batch before rendering — they are independent, so read them
+together rather than one at a time. The report is one page for two readers: a concise
+**management summary** (readiness headline, remediation outlook, gate count) over
+**developer detail** (prerequisites checklist, per-pattern findings). Keep both
+scannable — not exhaustive. Do not invent a different layout.
 
 Use the **report bucket labels** in the output (internal → report):
 
@@ -257,35 +244,12 @@ Architectural Redesign and Assessment Inconclusive are not AI-remediable. Whenev
 views, the report **must** include the caveat that those successors are navigation
 guides, not write targets — see the reference.
 
-## Worked examples
-
-**Example 1 — successor present, but read-only (falls through to Branch B).**
-Input: `Updating DDIC ... not allowed (successor available)` on an `UPDATE` to a
-material master table. Reading the code shows a genuine write of business fields.
-The attached successor is a set of released `I_Product*` **read** CDS views — no
-help for a write. Branch A falls through to Branch B; role is business/master;
-owning behavior is the released Product API/BO; the written fields map to it.
-→ **AI + Dev** (AI drafts the API-based write + LUW; developer validates and
-tests). Not AI fix (it is a write).
-
-**Example 2 — no successor, history table.**
-Input: `Updating DDIC ... not allowed` on `ZSUSLOCK` (`PROG`) writing `USH02`
-(`TABL`, change history for logon data, delivery class `L`). No successor. Reading
-the code confirms it manipulates user lock state and writes the history entry
-directly. Role is log/history: there is no write API for `USH02` by design — SAP
-writes it when a user operation goes through the standard user-admin behavior. The
-direct write should be removed, not swapped. Security-sensitive → review
-mandatory.
-→ **Redesign** (remove the manual history write; perform the user operation
-through the owning behavior so SAP writes the history), or **Assessment
-inconclusive** if the source cannot be read. Never AI fix.
-
 ## Boundaries
 
 - This skill **assesses and categorizes only**. Do not output remediated ABAP.
-  The deliverable is the HTML Clean Core Assessment report (Step 6), not fixed code.
-- It covers only the two DDIC-write message titles above. Other `Usage of APIs`
-  messages (e.g. `PERFORM program is not allowed`), modification findings, or
-  enhancement-technology findings are out of scope for this skill.
+  The deliverable is the HTML Clean Core Assessment report (Step 5), not fixed code.
+- It covers the clean-core ATC findings listed in the dispatch table. The DDIC-write
+  and object-modified modules are active today; the other listed messages are
+  skeletons, and any message not in the table is out of scope.
 - Do not re-run ATC and do not query the Cloudification Repository; the finding
   already carries the successor verdict.

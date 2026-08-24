@@ -22,7 +22,9 @@ at a glance. Four cards: **Findings · Remediation patterns · AI-remediable % �
 Blockers to clear**. Blockers highlighted (amber). Below the cards, **one** compact
 meta line: scope tag + message · object count · out of scope · target release · effort
 note (after verification). No paragraphs. Use the specific S/4 release (API
-availability is release-specific).
+availability is release-specific). The scope tag is the finding's **Check title**
+(e.g. `Usage of APIs`, or `Detect customer modifications` for object-modified) — not
+always `Usage of APIs`.
 
 ### B. Object Profile  · summary
 Placed directly under the KPI cards, above the outlook. One row per consuming object.
@@ -55,6 +57,11 @@ Table, **one row per distinct remediation pattern** (not per raw finding). Colum
 **Object · Type | Table | Operation | Field(s) | Location(s) | Derived write API |
 Confidence | Fix approach | Next step**.
 - Operation = INSERT/UPDATE/MODIFY/DELETE; Field(s) = written fields.
+- Columns carry a **finding-specific reading** — follow the matched module's *Report
+  cells*. For **object-modified**: Table = the modified SAP unit, Operation = change
+  kind (ADD / REPLACE / REMOVE), Field(s) = the changed routines/methods, and Derived
+  write API = the derived **extension option** (released BAdI / enhancement spot /
+  exit).
 - Location(s) = include/method/line; if the pattern repeats, show count + list
   (e.g. `×5 · LMGXXF01:142,151,…`). This is what makes a row jump-to-able.
 - Prefix `⚠ <domain>` on rows touching security/user/financial tables — mandatory
