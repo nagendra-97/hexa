@@ -1,13 +1,14 @@
 ---
-description: 'Hexa clean-core assessment — assess SAP ATC "Usage of APIs" DDIC-write findings and generate the Clean Core Assessment HTML report. Assessment only, no code fixes.'
+description: 'Hexa clean-core assessment — assess SAP clean-core ATC findings and generate the Clean Core Assessment HTML report. Assessment only, no code fixes.'
 mode: agent
 ---
 
-# /hexa-assess — Clean Core DDIC-Write Assessment
+# /hexa-assess — Clean Core Assessment
 
-Run the Hexa assessment: categorize SAP clean-core ATC findings where custom ABAP
-writes to an SAP DDIC table/view, and produce the **Clean Core Assessment** HTML
-report. **Assess and categorize only — never output remediated ABAP.**
+Run the Hexa assessment: categorize SAP clean-core ATC findings — per the active
+modules in `hexa/atc-assessment/SKILL.md` — into remediation-effort buckets, and produce
+the **Clean Core Assessment** HTML report. **Assess and categorize only — never output
+remediated ABAP.**
 
 ## Greeting — when called without an object or findings
 
@@ -51,9 +52,9 @@ the workflow. Reply with this short greeting and stop, waiting for their input:
   `S/4HANA Cloud 2508`). **Never ask the user for it.** Use it only if the user
   volunteers it; otherwise render `Target: not specified` — never guess.
 
-Scope is exactly these two message titles from the `Usage of APIs` check:
-`Updating DDIC database tables or DDIC table views is not allowed` and the same with
-`(successor available)`. Ignore / mark out-of-scope any other finding type.
+Scope = the **active** finding modules in `SKILL.md`'s dispatch table (DDIC-write,
+PERFORM-not-allowed, object-modified). Route each Priority 1 finding to its module by
+message title; any other finding type — including in-progress modules — is out of scope.
 
 ## Method — follow the skill
 
