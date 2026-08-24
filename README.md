@@ -39,6 +39,9 @@ flowchart TD
 `atc_scan` (the `hexa-atc` MCP server) runs and fetches in one call over ADT REST with
 your SSO session cookie — no external ATC tooling. Assessment is **read-only**.
 
+**Inside each skill:** high-level flow diagrams per finding module live in
+[hexa/atc-assessment/diagrams/](hexa/atc-assessment/diagrams/).
+
 ## Prerequisites
 
 - **VS Code** with **GitHub Copilot Chat** (Agent mode) and MCP support.
@@ -91,6 +94,7 @@ cookie needed for the paste path.
    │  ├─ SKILL.md                        ← assessment logic (two-branch routing, gates)
    │  ├─ references/report-format.md     ← exact report layout spec
    │  ├─ references/atc-run-intake.md    ← automated intake (atc_scan) flow
+   │  ├─ diagrams/                        ← high-level flow diagram per skill module
    │  └─ assets/report-template.html     ← styled HTML report template
    └─ atc-mcp/                           ← local MCP server (run + fetch Priority 1)
       ├─ server.mjs
