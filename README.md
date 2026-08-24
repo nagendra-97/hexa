@@ -35,10 +35,12 @@ Any Priority 1 finding outside this list is reported as **out of scope**.
    cd hexa/atc-mcp
    npm install
    ```
-3. **Add your H1E cookie:** create `hexa/atc-mcp/cookie.txt` (git-ignored) containing one
-   line — `SAP_SESSIONID_H1E_104=<value>` — copied from an authenticated browser session
-   to `https://azlsaph1eas01.int.pg.com:8443` (DevTools → Application → Cookies → select
-   the site → copy `SAP_SESSIONID_H1E_104`). Details in
+3. **Add your H1E cookie:** open this URL in your browser to authenticate (SSO), then
+   read its cookies:
+   `https://azlsaph1eas01.int.pg.com:8443/sap/opu/odata/sap/adt_srv/?sap-client=104`
+   — DevTools (F12) → Application → Cookies → select the site → copy the
+   **`SAP_SESSIONID_H1E_104`** value into `hexa/atc-mcp/cookie.txt` (git-ignored) as one
+   line: `SAP_SESSIONID_H1E_104=<value>`. More detail in
    [hexa/atc-mcp/README.md](hexa/atc-mcp/README.md).
 4. **Start the server:** the ready-made `.vscode/mcp.json` registers `hexa-atc` for you —
    Command Palette → **“MCP: List Servers”** → `hexa-atc` → **Start** (or reload the window).

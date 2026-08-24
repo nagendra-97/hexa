@@ -45,10 +45,12 @@ server only reads the resulting worklist.
    SAP_SESSIONID_H1E_104=<value>
    ```
 
-   Get it from an authenticated browser session to
-   `https://azlsaph1eas01.int.pg.com:8443` (DevTools → Application → Cookies → select
-   the site → copy `SAP_SESSIONID_H1E_104`). It expires with your session; refresh it
-   when `atc_check_connection` reports 401/403.
+   Get it by opening this URL in your browser to authenticate via SSO, then read its
+   cookies:
+   `https://azlsaph1eas01.int.pg.com:8443/sap/opu/odata/sap/adt_srv/?sap-client=104`
+   — DevTools (F12) → Application → Cookies → select the site → copy
+   `SAP_SESSIONID_H1E_104`. It expires with your session; refresh it when
+   `atc_check_connection` reports 401/403.
 
    > **Use the session cookie, not `MYSAPSSO2`.** On this landscape the browser's
    > `MYSAPSSO2` ticket is issued by another system (H1D) and H1E rejects it
