@@ -20,6 +20,25 @@ Each finding type has its own assessment module. **Active** = assessed today;
 
 Any Priority 1 finding outside this list is reported as **out of scope**.
 
+## How it works
+
+```mermaid
+flowchart TD
+  A["/hexa-assess (name an object)"] --> B{Intake}
+  B -->|automated · default| C[atc_scan — one MCP call]
+  B -->|fallback| P[Paste ATC findings]
+  C --> C1["resolve URI → CSRF → run ZSMASH_CLEANCORE → fetch worklist → enrich successors → group into patterns"]
+  C1 --> D[Priority 1 findings, grouped into patterns]
+  P --> D
+  D --> E[Confirm scope with developer]
+  E --> F["Read flagged source fresh (window at each ATC line)"]
+  F --> G["Classify per SKILL dispatch → AI Fix / AI + Dev / Redesign / Inconclusive (+ gates)"]
+  G --> H[Render Clean Core Assessment report · HTML]
+```
+
+`atc_scan` (the `hexa-atc` MCP server) runs and fetches in one call over ADT REST with
+your SSO session cookie — no external ATC tooling. Assessment is **read-only**.
+
 ## Prerequisites
 
 - **VS Code** with **GitHub Copilot Chat** (Agent mode) and MCP support.
