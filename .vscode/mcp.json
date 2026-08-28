@@ -10,6 +10,51 @@
         "H1E_TLS_INSECURE": "true",
         "H1E_COOKIE_FILE": "hexa/atc-mcp/cookie.txt"
       }
+    },
+    "hexa-rapbo": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["hexa/rapbo-mcp/server.mjs"],
+      "env": {
+        "H1E_BASE_URL": "https://azlsaph1eas01.int.pg.com:8443",
+        "H1E_CLIENT": "104",
+        "H1E_TLS_INSECURE": "true",
+        "H1E_COOKIE_FILE": "hexa/atc-mcp/cookie.txt"
+      }
+    },
+    "sap-api-hub": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "sap-api-hub-mcp"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "SAP_SSO_STORAGE_STATE": "C:\\Users\\uppala.n\\.sap-mcp\\sso-storage-state.json",
+        "SAP_LOGIN_URL": "https://me.sap.com/home"
+      }
+    },
+    "sap-roadmap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "sap-roadmap-mcp"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "ROADMAP_DEFAULT_RANGE": "CURRENT-LAST",
+        "SAP_SSO_STORAGE_STATE": "C:\\Users\\uppala.n\\.sap-mcp\\sso-storage-state.json",
+        "SAP_LOGIN_URL": "https://me.sap.com/home"
+      }
+    },
+    "sap-notes": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["hexa/sap-mcp-servers/packages/notes/dist/mcp-server.js"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "AUTH_METHOD": "auto",
+        "SAP_SSO_STORAGE_STATE": "C:\\Users\\uppala.n\\.sap-mcp\\sso-storage-state.json",
+        "SAP_LOGIN_URL": "https://me.sap.com/home"
+      }
     }
   }
 }

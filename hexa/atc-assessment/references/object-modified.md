@@ -72,6 +72,14 @@ The ABAP/ADT virtual-document rules in `../SKILL.md` apply — opened standard o
 are read-only virtual documents; read the open tabs/attached context rather than
 marking source unavailable because on-disk search missed them.
 
+A modification made **with the Modification Assistant** carries inline
+`*{ INSERT }*` / `*{ REPLACE }*` / `*{ DELETE }*` markers (or SE95 entries) that hand
+you the diff directly; a **classic modification (no Assistant)** has no markers and
+depends on Version Management (active-vs-delivered) to reconstruct — so an
+unretrievable original is the common trigger for *Assessment Inconclusive* here. The
+technique never changes the bucket (routing is driven by the ADD/REPLACE/REMOVE shape
+and hook availability), only how cheaply the diff is obtained.
+
 **Precedence:** source read from the workspace outranks any inference from the object
 name. If the **original SAP version cannot be retrieved** (no version history, source
 unavailable), the change cannot be reconstructed → **Assessment inconclusive

@@ -73,9 +73,14 @@ Do not trust the successor blindly for a write. Table successors are frequently
   API/behavior that matches the operation** → the target is handed to you.
   - read / `SELECT` swapped for the successor CDS view → **AI fix**
   - write performed through the named released API with LUW handling → **AI + Dev**
-- If the successor is a **read view but the operation is a write** → the successor
-  does not resolve the finding. Treat it as effectively no-successor and fall
-  through to Branch B.
+- If the successor is a **read-only CDS view but the operation is a write** → the view
+  is not itself a write target, but it is the **navigation hint** to the on-stack RAP
+  business object behind it. Do **not** treat it as a dead end: keep the RAP BO for that
+  CDS view as the **candidate write target** (Branch B ①), route the write to **AI +
+  Dev**, and record the prerequisite as *"confirm the RAP BO behind CDS <view> is
+  write-capable for fields <fields>"* — the exact lead the fix phase resolves via the
+  RAP-BO resolver. Only if no owning behaviour can be reasoned at all does it fall
+  through to Branch B's redesign path.
 
 **Branch B — no successor (plain message, or fell through from A).**
 SAP's classification gives nothing, so reason about which behavior owns the
@@ -137,19 +142,25 @@ Per DDIC-write finding, supply these finding-specific fields to the shared repor
 step: **operation (verb) + fields written** · **code location
 (include/method/line)** · **successor + kind** · **derived write API/behavior** ·
 **write-path feasibility**. Whenever a "successor available" finding resolves to a
-write whose successors are read-only CDS views, the report **must** include the
-caveat that those successors are navigation guides, not write targets.
+write whose successors are read-only CDS views, the report **must** note that those
+views are **navigation hints to the on-stack RAP BO behind them** — not write targets
+themselves — and carry the matching prerequisite (*confirm the RAP BO behind CDS
+<view> is write-capable for the written fields*), which the fix phase resolves via the
+RAP-BO resolver.
 
 ## Worked examples
 
-**Example 1 — successor present, but read-only (falls through to Branch B).**
+**Example 1 — successor present, read-only CDS (hint to the RAP BO).**
 Input: `Updating DDIC ... not allowed (successor available)` on an `UPDATE` to a
 material master table. Reading the code shows a genuine write of business fields.
-The attached successor is a set of released `I_Product*` **read** CDS views — no
-help for a write. Branch A falls through to Branch B; role is business/master;
-owning behavior is the released Product API/BO; the written fields map to it.
+The attached successor is a set of released `I_Product*` **read-only** CDS views —
+not write targets themselves, but the **hint** to the on-stack Product RAP BO behind
+them. Role is business/master; owning behaviour is the released Product API/BO, and
+the fix phase resolves the CDS successor to that BO (via the RAP-BO resolver); the
+written fields map to it.
 → **AI + Dev** (AI drafts the API-based write + LUW; developer validates and
-tests). Not AI fix (it is a write).
+tests). Not AI fix (it is a write). Prerequisite: *confirm the Product RAP BO is
+write-capable for the written fields on the target release.*
 
 **Example 2 — no successor, history table.**
 Input: `Updating DDIC ... not allowed` on `ZSUSLOCK` (`PROG`) writing `USH02`

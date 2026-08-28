@@ -1,0 +1,29 @@
+// Example MCP client registration for hexa-rapbo-mcp.
+// Copy the relevant block into your MCP client config (e.g. .vscode/mcp.json or the
+// client's mcp servers file) and adjust paths/credentials. The server talks to ONE
+// ABAP system over ADT REST and only issues GET requests (read-only).
+//
+// Auth: reuses the SAME env contract as hexa-atc-mcp, so you can point it at the
+// same cookie file. Prefer HTTP Basic (H1E_USER + H1E_PASSWORD[_FILE]); the cookie
+// path is the fallback. Credentials are read from env only — never a tool argument.
+{
+  "servers": {
+    "hexa-rapbo": {
+      "command": "node",
+      "args": ["./hexa/rapbo-mcp/server.mjs"],
+      "env": {
+        "H1E_BASE_URL": "https://azlsaph1eas01.int.pg.com:8443",
+        "H1E_CLIENT": "104",
+        "H1E_TLS_INSECURE": "true",
+
+        // --- Option A (recommended): HTTP Basic ---
+        // "H1E_USER": "YOUR_USER",
+        // "H1E_PASSWORD_FILE": "./hexa/rapbo-mcp/password.txt",
+
+        // --- Option B: session cookie (fallback) ---
+        // Reuse the atc-mcp cookie file so there is one place to refresh.
+        "H1E_COOKIE_FILE": "./hexa/atc-mcp/cookie.txt"
+      }
+    }
+  }
+}

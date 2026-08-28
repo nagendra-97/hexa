@@ -7,3 +7,12 @@ Thumbs.db
 .vscode/*
 # …but ship the ready-made MCP registration (no secrets; cookie lives in cookie.txt)
 !.vscode/mcp.json
+
+# Local credentials for the SAP MCP servers (never commit)
+.env
+
+# Secrets / caches — never commit
+cookie.txt
+*token-cache*.json
+password*.txt
+node_modules/

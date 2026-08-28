@@ -1,0 +1,21 @@
+{
+  "name": "hexa-rapbo-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local MCP server that resolves whether an ATC 'successor available' CDS view (or an OData service) has a real on-stack RAP Business Object behind it — walking CDS view → behavior definition (and OData service → service definition → exposed CDS entity) over ADT REST. Turns a read-only-successor dead-end into an actionable on-stack write lead for clean-core remediation.",
+  "type": "module",
+  "bin": {
+    "hexa-rapbo-mcp": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "probe": "node server.mjs --probe"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "fast-xml-parser": "^4.5.0"
+  }
+}
