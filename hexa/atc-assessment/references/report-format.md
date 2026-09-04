@@ -28,10 +28,12 @@ always `Usage of APIs`.
 
 ### B. Object Profile  · summary
 Placed directly under the KPI cards, above the outlook. One row per consuming object.
-Columns: **Object | Type | Package | Lines | Source | Findings | Patterns | Fix
-approach**. Source = ✓ if the object's code was read (Step 2); a blank should
-correlate with lower confidence. Fix approach = the object's roll-up (most severe)
-bucket. Keep it thin — for a single object it's one row.
+Columns: **Object | Type | Package | Lines | Source | Clean Core level | Findings |
+Patterns | Fix approach**. Source = ✓ if the object's code was read (Step 2); a blank
+should correlate with lower confidence. Clean Core level = the finding's clean-core
+classification; currently static **Level D** (scope is Level D findings only). Fix
+approach = the object's roll-up (most severe) bucket. Keep it thin — for a single
+object it's one row.
 
 ### C. Remediation Outlook  · summary
 Table. Columns: **Fix approach | Findings | Patterns | Share | Distribution**.

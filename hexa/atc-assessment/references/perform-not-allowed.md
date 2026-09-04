@@ -7,15 +7,14 @@
 
 Use this module together with the shared four buckets, workflow skeleton,
 read-source step, shared overrides, and report step in [../SKILL.md](../SKILL.md).
-This module supplies the PERFORM-specific parsing, the two-axis classification
-(ownership × what the routine does), and the branch routing — including the
-researched redesign paths.
+This module supplies the PERFORM-specific parsing, the behavior classification of the
+called SAP routine, and the branch routing — including the researched redesign paths.
 
 ## Contents
 - Scope
 - Step 1 — Parse the finding
 - Step 2 — Read the source
-- Step 3 — Classify (two axes: ownership × routine behavior)
+- Step 3 — Classify (what the called SAP routine does)
 - Step 4 — Route into the four buckets (with researched redesign paths)
 - Overrides & sensitivity
 - Report cells (PERFORM-specific record fields)
@@ -23,14 +22,19 @@ researched redesign paths.
 
 ## Scope
 
-"PERFORM program is not allowed" flags an **external subroutine call into another
-program** — `PERFORM <form> IN PROGRAM <prog>` (including the dynamic
-`PERFORM (name) IN PROGRAM <prog>` form). Clean core rejects it for two reasons at
-once: FORM routines are an obsolete procedural construct, **and** a subroutine inside
-another program is never a released, stable contract. The remediation target is a
-**released, callable API surface** — a released BAPI / function module / class method,
-or a local refactor into a class method — **not** a CDS successor (as in DDIC-write)
+"PERFORM program is not allowed" is part of the **"Usage of APIs"** check, which
+governs the use of **non-released SAP objects**. It flags `PERFORM <form> IN PROGRAM
+<sap_prog>` (including the dynamic `PERFORM (name) IN PROGRAM <sap_prog>` form) where
+the called program/subroutine is an **SAP object that is not released** — custom code
+reaching into SAP internals via an external subroutine (SAP Notes 3565942, 3766598).
+The remediation target is a **released, callable SAP API surface** — a released
+BAPI / function module / class method — **not** a CDS successor (as in DDIC-write)
 and **not** an extension hook (as in object-modified).
+
+**Scope — SAP-owned targets only.** Because this is the *Usage of APIs* check, the
+called program is always **SAP-owned and unreleased**; a `PERFORM` into your own
+`Z`/`Y` program is *not* this finding. (Custom-code `FORM`/`PERFORM` as a language
+construct is governed by the separate ABAP-Cloud *language-version* check, not here.)
 
 Two properties make this finding distinct to assess:
 
@@ -53,11 +57,10 @@ Extract, from the finding row/text:
 - **Consuming object** — the custom object that contains the `PERFORM` statement
   (name + type, e.g. a custom program or function group). This is where the source
   lives.
-- **Referenced object** — the called program (name + type `PROG`), plus its package,
-  software component, and application component if given. These identify **who owns
-  the called program** — the first routing axis. A software component like `S4CORE`
-  (and a package flagged legacy, e.g. a `*_OLD` package) signals an SAP-owned,
-  frequently superseded target.
+- **Referenced object** — the called SAP program (name + type `PROG`), plus its
+  package, software component, and application component if given. A software component
+  like `S4CORE` and a legacy package (e.g. a `*_OLD` package) signal a frequently
+  superseded target whose released successor API you must derive.
 - **PERFORM-specific attributes** — read from the source in Step 2, not from the
   finding: the **FORM name(s)** called and the **parameters crossing the boundary**
   (`USING` / `CHANGING` / `TABLES`). The finding names the program but not the form or
@@ -74,9 +77,8 @@ The finding names the consuming object and the called program but not the logic.
 `PERFORM … IN PROGRAM` statement**, then extract exactly the inputs the routing
 branches on:
 
-- **Ownership of the called program** (Axis A) — SAP-owned vs. customer-owned.
-- **What the called routine does** (Axis B) — a transactional/business operation, a
-  pure utility/computation/read, or a legacy batch-/direct-input driver. Read the
+- **What the called routine does** — a transactional/business operation, a pure
+  utility/computation/read, or a legacy batch-/direct-input driver. Read the
   called FORM's body when it is available (the SAP program is often a read-only ADT
   virtual document); when it is not readable, infer the behavior from the program's
   role and the parameters passed, and record the gap.
@@ -100,45 +102,31 @@ name. If the **consuming source cannot be read** — or the called routine's beh
 genuinely undeterminable and no parameter contract can be recovered — that gap feeds
 **Assessment inconclusive (source required)**, with the provisional route noted.
 
-## Step 3 — Classify (two axes)
+## Step 3 — Classify (what the called SAP routine does)
 
-Routing is decided by two orthogonal questions, not one.
-
-**Axis A — Ownership of the called program.**
-
-- **SAP-owned** (the referenced `PROG` belongs to an SAP software component) — the
-  true clean-core coupling: the fix is a **released SAP API** that reproduces the call.
-- **Customer-owned** (a `Z`/`Y` program) — not an SAP-API gap at all; it is a
-  **modularization** problem. The fix is refactoring the FORM into a callable class
-  method / local released API, keeping the logic in custom code.
-
-**Axis B — What the called routine does.**
+The called program is always SAP-owned (see Scope), so routing turns on a single
+question: **what does the called routine do?**
 
 - **Transactional / business operation** — posts, updates, or drives a document or
   master record → owned by a released API/BAPI/BO.
 - **Utility / pure computation / read** — formatting, conversion, a lookup, a
-  side-effect-free calculation → may have a released class/FM equivalent, or is cheap
-  to reimplement locally.
+  side-effect-free calculation → may have a released class/FM equivalent.
 - **Legacy driver** — a batch-/direct-input program (e.g. a classic `RM*` maintenance
   driver) → superseded by a released API by design.
 
 ## Step 4 — Route into the four buckets
 
-Combine the two axes:
+Route on the behavior of the called SAP routine:
 
-- **Customer-owned FORM (any behavior)** → **AI + Developer Fix.** Refactor the
-  subroutine into a class method / local released API and replace the external
-  `PERFORM`; a developer validates behavioral parity and tests. This is a
-  modernization, not an SAP-API gap.
-- **SAP-owned + utility/pure-compute with a released 1:1 equivalent, no transactional
-  side effects** → **AI Fix** *(rare — the only door to AI Fix for this finding)*. A
+- **Utility / pure-compute with a released 1:1 equivalent, no transactional side
+  effects** → **AI Fix** *(rare — the only door to AI Fix for this finding)*. A
   deterministic swap of the external `PERFORM` for a released class/FM call, knowable
   from the code alone. This is the direct analogue of DDIC-write's read-swap.
-- **SAP-owned + transactional / legacy driver, and a released API/BAPI/method
-  reproduces it** → **AI + Developer Fix.** AI drafts the API-based call with LUW /
-  lock / authorization handling; a developer validates semantics and tests.
-- **SAP-owned + no released API reproduces the call** → **Architectural Redesign**
-  (see the researched paths below).
+- **Transactional / legacy driver, and a released API/BAPI/method reproduces it** →
+  **AI + Developer Fix.** AI drafts the API-based call with LUW / lock / authorization
+  handling; a developer validates semantics and tests.
+- **No released API reproduces the call** → **Architectural Redesign** (see the
+  researched paths below).
 - **Source unreadable or intent/contract undeterminable** → **Assessment
   Inconclusive (source required)**, with the provisional route noted.
 
@@ -146,12 +134,36 @@ Combine the two axes:
 
 Because the finding is feasibility-silent, **name at least one concrete candidate
 released target** in the record's "Derived target" field for every finding — a
-released API/BAPI for a business op, a released class/FM for a utility, a local class
-method for a customer-owned FORM. A named candidate lifts the route out of Assessment
+released API/BAPI for a business op, a released class/FM for a utility. A named
+candidate lifts the route out of Assessment
 Inconclusive toward AI + Developer Fix. **Candidate ≠ verified:** each proposed target
 carries a release-status-to-verify and a parameter-mapping-to-verify, which become
 **prerequisite rows** (Status Open, verified count 0). Prefer released over classic —
 lead with the released API and list a classic BAPI/FM as the fallback with that caveat.
+
+### Assessment framing — name the candidate, do not draft the fix
+
+The Findings detail must be **concrete but stay at classification level**. Concrete
+means a *named* candidate target and a *specific* feasibility gate — **not** fix code.
+Three rules keep the assessment on its own side of the line (the fix itself is the
+`/hexa-remediate` phase's job):
+
+- **Name a candidate, never write the replacement.** "Derived target" holds a *named*
+  released API/class/CDS (e.g. *"released material read (API/CDS)"*) — never ABAP
+  snippets, `SELECT`s, or method bodies. If you find yourself writing the fix, you have
+  crossed into remediation.
+- **Prerequisites are feasibility questions, not fix steps.** Frame each gate as *what
+  must be true for the candidate to work* — e.g. *"Confirm a released material read
+  provides what this call provides here (existence plus any attributes the flow
+  consumes)."* Never phrase it as *"confirm X so the swap works"* or *"before
+  swapping"* — that presupposes a specific fix.
+- **Hidden side effects lower confidence, never the bucket.** When the called SAP
+  routine does **more than its name implies** — most commonly it **caches data into
+  shared module-pool globals** (e.g. `MT06E`/`MAAPV`) that the surrounding flow later
+  reads — record it as a one-line **feasibility note** and drop confidence to *Likely*
+  / *Uncertain*. It does **not** downgrade the bucket: a named candidate still exists,
+  so the finding stays **AI + Developer Fix**. The coupling is the developer's
+  validation gate in the fix phase, not an assessment verdict.
 
 ### Architectural Redesign — research the solution paths
 
@@ -199,10 +211,10 @@ detail columns (`../references/report-format.md`, Section D) as follows:
 |---------------|-----------------------------|
 | Object · Type | consuming object · type (where the `PERFORM` lives) |
 | Table | the external target — called program · FORM (`⚠ <domain>` prefix when security/user/financial) |
-| Operation | `PERFORM` (external call); tag ownership `SAP` / `customer` |
+| Operation | `PERFORM` (external call into a non-released SAP program) |
 | Field(s) | the FORM name + parameters crossing the boundary (`USING` / `CHANGING` / `TABLES`) |
 | Location(s) | include/line of each `PERFORM` site (count + list if repeated) |
-| Derived write API | **Derived target** — released API/BAPI/method or local class method; `None — see redesign paths` for redesign |
+| Derived write API | **Derived target** — released API/BAPI/method; `None — see redesign paths` for redesign |
 | Confidence · Fix approach · Next step | per the shared report step |
 
 Footer ATC-variant note: `PERFORM external call (no successor)`. There is no
@@ -234,10 +246,3 @@ finer-grained released APIs; (2) re-platform onto the standard app's released se
 Record names the recommended path and its prerequisite (verify the released services
 cover the driver's outcome on the target release). If no path is feasible → formal
 exemption pending decision → **Assessment Inconclusive**.
-
-**Example 4 — customer-owned FORM.**
-A program calls `PERFORM … IN PROGRAM` a subroutine in another **custom** program. No
-SAP-API gap — a modularization issue. → **AI + Developer Fix** — refactor the FORM
-into a class method / local released API and replace the external `PERFORM`; developer
-validates parity. Prerequisite: confirm no other caller depends on the old external
-form signature.

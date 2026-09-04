@@ -152,8 +152,26 @@ flowchart TD
 8. **Generate the fix** — replace the flagged `INSERT`/`UPDATE`/`MODIFY`/`DELETE`
    with the target API call, mapping each written field, and scaffold the LUW / lock
    / return-code handling. See the matched module.
-9. **Emit the suggestion in the dedicated format below** — one block per pattern.
-   Follow that template exactly; do not invent an ad-hoc layout.
+9. **Emit the suggestion in the dedicated format below.** Follow that template exactly;
+   do not invent an ad-hoc layout.
+   **Block granularity = the fix unit, ordered finding-by-finding.** A **fix unit** is the
+   *smallest set of flagged statements that must change together to stay syntactically and
+   transactionally valid* — usually **one finding (one flagged location)**, but several
+   findings when a single inseparable replacement resolves them all (e.g. writes that share
+   one record / LUW, or a routine that collapses into one API call). Emit one Fix block per
+   fix unit, walking the findings in **ATC-worklist order**; **merge findings into one block
+   only when they are inseparable**, and **never split an inseparable change across blocks**
+   — a fragment the developer can't apply alone would corrupt data or fail to compile. Every
+   block carries a **Findings covered** map so each individual finding stays visible and
+   tickable against the worklist even when merged.
+   **Emission mode depends on the finding count F:**
+   - **F ≤ 3 → emit all fix-unit blocks at once** (`Fix 1 … Fix N`) in a single reply.
+   - **F > 3 → emit one fix-unit block at a time (interactive).** Emit only the **next** Fix
+     block, prefixed with a `Fix n of N` progress line, then **STOP and wait** for the
+     developer to confirm (applied / skip / adjust) before emitting the next. Repeat until
+     all N fix-unit blocks are covered. Never dump every block at once when F > 3, and never
+     move to the next fix without the developer's go-ahead. The run header is emitted once,
+     immediately before `Fix 1 of N`.
 
 **No-API branch (redesign / inconclusive).** If neither a Level A nor a Level B API
 exists, do **not** fabricate a fix. Consult **Note Search** and **Roadmap** for the
@@ -210,10 +228,15 @@ Concretely, every run is:
 
 1. A **one-line run header** —
    `**Remediation — <object>(s) · <report date>** · <F> finding(s) → <P> pattern(s)`.
-2. Then **one block per remediation pattern**, numbered `Fix 1 … Fix N`. **N = the number
-   of patterns** in the assessment — expand dynamically. Never collapse several patterns
-   into one block, and never emit only the first; every pattern gets its own block, in
-   report order.
+2. Then **one block per fix unit** (Step 9), numbered `Fix 1 … Fix N`. **N = the number of
+   fix units** — the smallest independently-applicable changes, walked in ATC-worklist
+   order; expand dynamically. A fix unit is usually one finding, but merges several findings
+   when they are inseparable (and every merged finding is still listed in the block's
+   **Findings covered** map). Never split an inseparable change across blocks, and never
+   merge independent findings. **Emit per the emission mode (Step 9):** for **F ≤ 3
+   findings**, emit every block in one reply; for **F > 3 findings**, emit them **one at a
+   time**, each led by a `Fix n of N` progress line, pausing for the developer's confirmation
+   until all N are done — same blocks, only the pacing differs.
 
 Use the **fix block** when a Level A/B API exists and the **redesign block** when it does
 not; a single run may interleave both, still numbered in sequence. Within each block use
@@ -223,7 +246,16 @@ sections, and do not invent an alternate layout.
 ### Fix block (Level A or B)
 
 ```md
-### Fix <n> — <OBJECT> · <TABLE> · <OPERATION> <FIELD(S)>
+### Fix <n> — <OBJECT> · <FIX-UNIT / TABLE(S)> · <OPERATION> <FIELD(S)>
+
+**Orientation** *(read first — written for a developer seeing this code for the first time)*
+| | |
+|---|---|
+| **What the code does** | <plain, jargon-free explanation of what the flagged routine achieves in business terms — use a real-world analogy a newcomer gets; do NOT use SAP jargon here (that lives in the Glossary)>.<br>**Simple example:** <one short, concrete before→after example in everyday terms, e.g. "the list says ID `…E600` but it should be `…FFFF` — the method corrects it">. |
+| **Why it's flagged → the fix** | <one plain sentence: the clean-core rule it breaks> — instead call the released <API / BO>. *(Note if this object already uses it elsewhere.)* |
+| **What stays the same** | <same outcome; only the write path changes> — <the one thing the developer must still verify (e.g. high-volume run)>. |
+
+**Glossary:** <one line; expand every table / API / ABAP construct used below on first use — `name` = plain meaning · …>
 
 | Fix profile | |
 |---|---|
@@ -237,6 +269,11 @@ sections, and do not invent an alternate layout.
 | Supported release(s) | Level A: <verify on-stack EML release / read-only control> · Level B: <ReleaseInfo, e.g. `2023 FPS00` — or "verify in your system"> |
 | Owning process | <SAP business process / business object> |
 
+**Findings covered**
+| ATC finding (loc) | Flagged statement | Resolved by |
+|---|---|---|
+| <include/method:line> | <the flagged INSERT/UPDATE/MODIFY/DELETE> | <API call / removed / → residual redesign> |
+
 **Before**
 ​```abap
 <flagged statement(s)>
@@ -244,6 +281,9 @@ sections, and do not invent an alternate layout.
 
 **After** — drafted; developer validates, not auto-applied
 **Encapsulation** · <reusable `×N` pattern → local class method (Clean ABAP)>  |  <one-off write → inline>
+> In the data-preparation part of the After, annotate each field being filled with an inline
+> `" e.g. <sample value>` comment (a realistic sample for the id/scheme/system/value fields),
+> so the developer can see what kind of value each field expects.
 
 *Option A — Level A (<released BO> via EML):*
 ​```abap
@@ -275,6 +315,15 @@ sections, and do not invent an alternate layout.
 ```md
 ### Fix <n> — <OBJECT> · <TABLE> · <OPERATION> <FIELD(S)> — no like-for-like API
 
+**Orientation** *(read first — written for a developer seeing this code for the first time)*
+| | |
+|---|---|
+| **What the code does** | <plain, jargon-free explanation + **Simple example** line, same style as the Fix block>. |
+| **Why it's flagged → why no drop-in fix** | <the clean-core rule it breaks> — and why there's no like-for-like API (config / log-history / unmappable field). |
+| **What needs to happen** | <the redesign decision at a glance — who should own the write instead>. |
+
+**Glossary:** <one line; expand every table / API / construct used below on first use>
+
 | Fix profile | |
 |---|---|
 | Object | <object> (<type>) |
@@ -292,28 +341,56 @@ sections, and do not invent an alternate layout.
 
 Rules:
 - **Consistent envelope, dynamic count.** Always emit the run header, then exactly one
-  numbered block per pattern (`Fix 1 … Fix N`). The format never changes between runs;
-  only the number of blocks does. If the report has 1 pattern, emit 1 block; if it has 7,
-  emit 7.
+  numbered block per **fix unit** (`Fix 1 … Fix N`), walked in ATC-worklist order. The
+  format never changes between runs; only the number of blocks does.
+- **Fix unit = smallest independently-applicable change.** Default to one block per finding;
+  merge findings into one block **only** when a single inseparable replacement resolves them
+  (writes that share one record / LUW, or a routine that collapses into one API call), and
+  **never split an inseparable change across blocks**. Every block lists each finding it
+  resolves in its **Findings covered** map — so remediation stays finding-by-finding
+  traceable without ever handing over a fragment that can't be applied on its own.
+- **Orientate a first-time reader (beautiful, 3 rows).** Every block opens with an
+  **Orientation** — a fixed **3-row** table (`What the code does` · `Why it's flagged → the
+  fix` · `What stays the same`) plus a one-line **Glossary**. Keep it exactly three rows.
+  The `What the code does` row must be **plain, jargon-free** (a real-world analogy a
+  newcomer understands) and carry a **Simple example** line beneath it with one concrete
+  before→after value; push all SAP names/acronyms into the Glossary, never into the
+  explanation. The orientation is what makes the technical detail below approachable.
+- **Show example values in the code.** In the After's data-preparation, annotate each field
+  being filled with an inline `" e.g. <sample value>` comment (realistic samples for the
+  id / scheme / system / value fields) so the developer sees what each field expects.
+- **Sequential emission when F > 3.** If the assessment carries more than three findings,
+  do not emit all blocks at once: emit the **next** fix-unit block only, prefixed
+  `Fix n of N`, then STOP and wait for the developer to confirm (applied / skip / adjust)
+  before emitting the next — repeat until every fix-unit block is emitted. The run header
+  appears once, before `Fix 1 of N`. For F ≤ 3, emit all blocks in a single reply. This
+  changes only the *pacing* of the blocks, never the block template.
 - **Reusable pattern → OO fix.** When the same write is remediated at more than one site
   (`×N`, or across several includes/routines), the **After** shows an OO ABAP class method
   (Clean ABAP) plus the call at each site — never a `FORM` subroutine or copy-pasted inline
   calls. State the choice in the **Encapsulation** line. A true one-off write stays inline.
   See `references/ddic-write.md` §4.
-- One block per pattern; a single finding that splits (most fields mappable, one not)
-  uses a **Fix block** with the unmapped field marked `✗ (→ residual redesign)` and a
-  short residual note — do not silently drop it.
+- A single finding that splits (most fields mappable, one not) uses a **Fix block** with the
+  unmapped field marked `✗ (→ residual redesign)` and a short residual note — do not silently
+  drop it.
 - Every `✗` field mapping and every read-only-successor caveat must be surfaced, not
   hidden.
 - Never write the remediated code into the object or activate anything — the block is a
   proposal for the developer to apply.
 - **Self-check before returning.** Confirm the output matches the fixed skeleton: a run
-  header, then `Fix 1 … Fix N` where **N = pattern count**; each **Fix block** has exactly
-  these sections in order — `### Fix n` heading · Fix profile table · Before · After
-  (with Encapsulation line, then `Option A`/`Option B` code in that order) · Field mapping
-  · Verify before shipping · Sensitivity. The **Fix profile** rows are fixed and in this
-  order: Object · Table · Operation · Locations · Level transition · API kind · Field
-  resolution · Supported release(s) · Owning process. The **Field mapping** table always
+  header (once) — followed by all blocks together when **F ≤ 3**, or one `Fix n of N` block
+  at a time when **F > 3**; across the run the blocks are `Fix 1 … Fix N` where **N = the
+  fix-unit count** (findings walked in worklist order, inseparable ones merged); each
+  **Fix block** has exactly
+  these sections in order — `### Fix n` heading · **Orientation** (3-row table) · **Glossary** ·
+  Fix profile table · Findings covered ·
+  Before · After (with Encapsulation line, then `Option A`/`Option B` code in that order) ·
+  Field mapping · Verify before shipping · Sensitivity. The **Orientation** is exactly three
+  rows with a jargon-free `What the code does` + `Simple example`. The **Fix profile** rows are
+  fixed and in this order: Object · Table · Operation · Locations · Level transition · API kind ·
+  Field resolution · Supported release(s) · Owning process. The **Findings covered** table
+  lists every ATC finding the block resolves (loc · flagged statement · how resolved). The
+  **Field mapping** table always
   has the four columns `Written field | Level A target | Level B target | Mapped?` (use `—`
   for an absent level). **Verify before shipping** always lists the Level A gate and the
   Level B gate (drop the line for a level that does not apply). Each **Redesign block** —

@@ -130,6 +130,43 @@ async function adtGet(path, accept) {
   return body;
 }
 
+// A few ADT information-system resources (virtual folders, where-used) are POST-only
+// and CSRF-protected. Fetch a token once (cached), and refetch on a 403 (stale token).
+let _csrfToken = null;
+async function getCsrf() {
+  if (_csrfToken) return _csrfToken;
+  const res = await fetch(
+    withClient("/sap/bc/adt/repository/informationsystem/search?operation=quickSearch&query=X&maxResults=1"),
+    { method: "GET", headers: { Accept: "application/*", ...getAuth(), "X-CSRF-Token": "Fetch", "User-Agent": "hexa-rapbo-mcp" } }
+  );
+  const t = res.headers.get("x-csrf-token");
+  if (t) _csrfToken = t;
+  return t;
+}
+
+async function adtPost(path, accept, body, contentType) {
+  const send = (tok) =>
+    fetch(withClient(path), {
+      method: "POST",
+      headers: { Accept: accept, "Content-Type": contentType, "X-CSRF-Token": tok || "", ...getAuth(), "User-Agent": "hexa-rapbo-mcp" },
+      body,
+    });
+  let res = await send(await getCsrf());
+  if (res.status === 403) {
+    _csrfToken = null; // token stale → refetch once and retry
+    res = await send(await getCsrf());
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`ADT POST ${path} → HTTP ${res.status} ${res.statusText}. ${text.slice(0, 300)}`);
+  }
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("text/html") || /sap-system-login|window\.location\.hash/i.test(text.slice(0, 800))) {
+    throw new Error(`ADT POST ${path} → not authenticated (received a logon page). Refresh the SSO cookie in the server environment.`);
+  }
+  return text;
+}
+
 // ---------------------------------------------------------------------------
 // XML parsing
 // ---------------------------------------------------------------------------
@@ -353,7 +390,179 @@ function parseReleaseState(src) {
   return { released, contractType, viewType, apiState, onStackWrite };
 }
 
-async function resolveRapBoFromCds(cdsView, fields, table) {
+// ---------------------------------------------------------------------------
+// Released-catalog discovery ("Use in Cloud Development")
+// ---------------------------------------------------------------------------
+// The input CDS (an ATC read successor like I_PRODUCT) is often the wrong layer:
+// the on-stack write target is the released *transactional interface* projection
+// of the SAME business object (e.g. I_ProductTP_2), which the literal input never
+// points at. Rather than guess names or crawl where-used, we read the object's
+// node type + package from the RIS objectproperties facets, then list the released
+// (USE_IN_CLOUD_DEVELOPMENT) behavior definitions in that package via virtual
+// folders, and resolve each as a candidate — the released catalog is authoritative
+// for "what is a clean-core on-stack target", so membership replaces contract guessing.
+
+const OP_TTL_MS = 10 * 60 * 1000;
+const opCache = new Map(); // uri -> { at, value }
+const relBdefCache = new Map(); // package -> { at, value }
+
+/** RIS object properties for an object uri: node type (text), package, release facet. */
+async function objectProperties(uri) {
+  const hit = opCache.get(uri);
+  if (hit && Date.now() - hit.at < OP_TTL_MS) return hit.value;
+  const xml = await adtGet(
+    "/sap/bc/adt/repository/informationsystem/objectproperties/values?uri=" + encodeURIComponent(uri),
+    "application/*"
+  );
+  const doc = parser.parse(xml);
+  const obj = doc.objectProperties?.object;
+  const props = toArray(doc.objectProperties?.property);
+  const apiVals = props
+    .filter((p) => String(attr(p, "facet") || "").toUpperCase() === "API")
+    .map((p) => String(attr(p, "name") || "").toUpperCase());
+  const ancestorPackages = props
+    .filter((p) => String(attr(p, "facet") || "").toUpperCase() === "PACKAGE")
+    .map((p) => attr(p, "name"))
+    .filter(Boolean);
+  const value = {
+    nodeType: attr(obj, "text") || null, // e.g. "Product" (sapObjectNodeType)
+    package: attr(obj, "package") || null,
+    ancestorPackages, // package hierarchy (broad → specific) from the PACKAGE facet
+    released: apiVals.includes("RELEASED") || apiVals.includes("USE_IN_CLOUD_DEVELOPMENT"),
+    apiVals,
+  };
+  opCache.set(uri, { at: Date.now(), value });
+  return value;
+}
+
+/** Released (cloud-dev) behavior definitions, via RIS virtual folders. Scope by package
+ *  tree and/or a fuzzy name pattern (objectSearchPattern, e.g. `*COSTCENTER*`). */
+async function queryReleasedBdefs({ pkg, pattern = "*" } = {}) {
+  const key = `${(pkg || "*").toUpperCase()}|${pattern.toUpperCase()}`;
+  const hit = relBdefCache.get(key);
+  if (hit && Date.now() - hit.at < OP_TTL_MS) return hit.value;
+  const pre =
+    (pkg ? `<vfs:preselection facet="package"><vfs:value>${pkg}</vfs:value></vfs:preselection>` : "") +
+    `<vfs:preselection facet="type"><vfs:value>BDEF</vfs:value></vfs:preselection>` +
+    `<vfs:preselection facet="api"><vfs:value>USE_IN_CLOUD_DEVELOPMENT</vfs:value></vfs:preselection>`;
+  const body =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<vfs:virtualFoldersRequest xmlns:vfs="http://www.sap.com/adt/ris/virtualFolders" objectSearchPattern="${pattern}">` +
+    pre +
+    `<vfs:facetorder></vfs:facetorder></vfs:virtualFoldersRequest>`;
+  const xml = await adtPost(
+    "/sap/bc/adt/repository/informationsystem/virtualfolders/contents",
+    "application/*",
+    body,
+    "application/vnd.sap.adt.repository.virtualfolders.request.v1+xml"
+  );
+  const doc = parser.parse(xml);
+  const objs = toArray(doc.virtualFoldersResult?.object).map((o) => ({
+    name: attr(o, "name"),
+    uri: attr(o, "uri"),
+    nodeType: attr(o, "text"),
+    package: attr(o, "package"),
+  }));
+  relBdefCache.set(key, { at: Date.now(), value: objs });
+  return objs;
+}
+
+/** Released behavior definitions in a package tree (back-compat wrapper). */
+const listReleasedBdefs = (pkg) => queryReleasedBdefs({ pkg });
+
+/**
+ * When the literal input view yields no on-stack Level A target, discover the
+ * released transactional-interface BO of the same object node type from the
+ * cloud-dev catalog and resolve it. Returns a Level A/A_partial core result, or null.
+ */
+/**
+ * Relate two object-node-type texts. Exact wins; otherwise a word-boundary prefix is
+ * treated as the same object variant (e.g. read view "Billing Document Basic" vs the
+ * write BO "Billing Document"). Non-prefix look-alikes ("Consolidation Cost Center",
+ * "Billing Document Request") are rejected. Returns "exact" | "prefix" | null.
+ */
+function nodeTypeRel(candText, inputText) {
+  const a = String(candText || "").trim().toUpperCase();
+  const b = String(inputText || "").trim().toUpperCase();
+  if (!a || !b) return null;
+  if (a === b) return "exact";
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return longer.startsWith(shorter + " ") ? "prefix" : null;
+}
+
+async function discoverReleasedLocalBo(cdsView, fields, table) {
+  const cds = await loadSource("DDLS", cdsView).catch(() => null);
+  if (!cds || !cds.uri) return null;
+  const op = await objectProperties(cds.uri).catch(() => null);
+  if (!op || !op.package) return null;
+
+  // The released transactional-interface BO can live in a *sibling* sub-package
+  // (…_BO_INTERFACE) that the input's own package doesn't contain. So try the
+  // immediate package first, then walk up the package ancestors (specific → broad),
+  // bounded, until a same-node-type released BDEF is found.
+  const tryPkgs = [];
+  const seen = new Set();
+  const pushPkg = (p) => {
+    if (p && !seen.has(p.toUpperCase())) {
+      seen.add(p.toUpperCase());
+      tryPkgs.push(p);
+    }
+  };
+  pushPkg(op.package);
+  [...(op.ancestorPackages || [])].reverse().forEach(pushPkg);
+
+  const nt = op.nodeType || null;
+  // Keep candidates whose node type is the same object (exact or variant-prefix),
+  // exclude the input view, and rank exact matches ahead of prefix matches.
+  const pickCands = (list) =>
+    list
+      .map((c) => ({ c, rel: nt ? nodeTypeRel(c.nodeType, nt) : "exact" }))
+      .filter((x) => x.rel && x.c.name && x.c.name.toUpperCase() !== cdsView.toUpperCase())
+      .sort((x, y) => (y.rel === "exact") - (x.rel === "exact"))
+      .map((x) => x.c);
+
+  let candidates = [];
+  for (const pkg of tryPkgs.slice(0, 3)) {
+    const scoped = pickCands(await listReleasedBdefs(pkg).catch(() => []));
+    if (scoped.length) {
+      candidates = scoped;
+      break;
+    }
+  }
+
+  // Package-independent fallback: fuzzy-search the whole released BDEF catalog by name.
+  // The writable BO can live outside the read view's package tree (e.g. the CO
+  // cost-center BO, or the SD billing BO). Derive name stems from the node type by
+  // progressively dropping trailing words ("Billing Document Basic" → BILLINGDOCUMENT),
+  // and confirm each candidate by node type (exact or variant-prefix).
+  if (!candidates.length && nt) {
+    const words = nt.split(/\s+/).filter(Boolean);
+    const stems = [];
+    for (let n = words.length; n >= 1; n--) {
+      const s = words.slice(0, n).join("").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      if (s.length >= 6 && !stems.includes(s)) stems.push(s);
+    }
+    for (const stem of stems) {
+      const scoped = pickCands(await queryReleasedBdefs({ pattern: `*${stem}*` }).catch(() => []));
+      if (scoped.length) {
+        candidates = scoped;
+        break;
+      }
+    }
+  }
+  if (!candidates.length) return null;
+
+  // Resolve each candidate (skipping its own discovery to avoid recursion); first Level A local wins.
+  for (const c of candidates.slice(0, 8)) {
+    const res = await resolveRapBoCore(c.name, fields, table).catch(() => null);
+    if (res && (res.fixApproach?.level === "A" || res.fixApproach?.level === "A_partial")) {
+      return { candidate: c, result: res, anchor: { nodeType: op.nodeType, package: op.package } };
+    }
+  }
+  return null;
+}
+
+async function resolveRapBoCore(cdsView, fields, table) {
   const notes = [];
   const fieldList = (Array.isArray(fields) ? fields : fields ? [fields] : [])
     .map((f) => String(f).trim())
@@ -537,6 +746,42 @@ async function resolveRapBoFromCds(cdsView, fields, table) {
     ],
     leadTrail: `${cdsView} (CDS) → ${rootEntity} → BDEF ${bdefRef.name} (${bdef.implementationType}${writable ? ", writable" : ""})`,
   };
+}
+
+/**
+ * Public entry: resolve the input CDS view directly; if that yields no on-stack
+ * Level A target, fall back to the released-catalog discovery to find the object's
+ * released transactional-interface BO (e.g. I_PRODUCT → I_ProductTP_2) and return
+ * that instead. Never returns worse than the direct resolution.
+ */
+async function resolveRapBoFromCds(cdsView, fields, table) {
+  const primary = await resolveRapBoCore(cdsView, fields, table);
+  const isLevelALocal = primary?.fixApproach?.level === "A" || primary?.fixApproach?.level === "A_partial";
+  if (isLevelALocal || primary?.cdsResolved === false) return primary;
+
+  let disc = null;
+  try {
+    disc = await discoverReleasedLocalBo(cdsView, fields, table);
+  } catch {
+    disc = null; // discovery is best-effort — never fail the direct answer
+  }
+  if (disc) {
+    const alt = disc.result;
+    return {
+      ...alt,
+      discoveredVia: "released-catalog",
+      supersedes: {
+        input: cdsView,
+        verdict: primary.verdict,
+        level: primary?.fixApproach?.level || null,
+      },
+      notes: [
+        `Released-catalog discovery: input '${cdsView}' had no on-stack Level A (${primary.verdict}); the released transactional-interface BO for object node type '${disc.anchor.nodeType || "?"}' is '${disc.candidate.name}' (USE_IN_CLOUD_DEVELOPMENT, package ${disc.candidate.package}). Resolved that instead.`,
+        ...(alt.notes || []),
+      ],
+    };
+  }
+  return { ...primary, releasedCatalogChecked: true };
 }
 
 /**
@@ -747,18 +992,21 @@ async function resolveExposedName(entity, table, field, depth, cache) {
 
   // Direct: this view maps the target column itself. Match when the column is qualified
   // with the table name OR with the from-clause alias for that table (e.g. `bk.banka`
-  // where the view does `select from bnka as bk`).
+  // where the view does `select from bnka as bk`), OR is an UNQUALIFIED column of a view
+  // whose `from` IS the target table (e.g. `bukrs as CompanyCode` in `select from csks`).
   const tableU = table.toUpperCase();
   const fieldU = field.toUpperCase();
   const fromU = (parsed.from || "").toUpperCase();
   const aliasU = (parsed.fromAlias || "").toUpperCase();
   const direct = parsed.elements.find(
     (e) =>
-      e.refField &&
-      e.refField.toUpperCase() === fieldU &&
-      e.refTable &&
-      (e.refTable.toUpperCase() === tableU ||
-        (aliasU && e.refTable.toUpperCase() === aliasU && fromU === tableU))
+      (e.refField &&
+        e.refField.toUpperCase() === fieldU &&
+        e.refTable &&
+        (e.refTable.toUpperCase() === tableU ||
+          (aliasU && e.refTable.toUpperCase() === aliasU && fromU === tableU))) ||
+      // unqualified bare column of the table-reading view (from === the target table)
+      (fromU === tableU && e.refElem && !e.refTable && e.refElem.toUpperCase() === fieldU)
   );
   if (direct)
     return {
